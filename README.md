@@ -71,6 +71,32 @@ Verify the download against `checksums.txt` in the release:
 sha256sum -c checksums.txt --ignore-missing
 \`\`\`
 
+## Configure (recommended)
+
+`sws configure` is an `aws configure`-style interactive setup. It prompts for
+your API URL, an API token (create one under **Account → API Keys** — `ctk_…`),
+and a default region, then saves them to `~/.sws/config.yaml` so you don't need
+to export env vars (requires v1.0.2+):
+
+```bash
+$ sws configure
+API URL [https://savannaa.com]:
+API token (ctk_...): ctk_your_api_key_here
+Default region (ng-abuja-1 | ng-lagos-1) [ng-lagos-1]: ng-abuja-1
+✓ Saved profile default to ~/.sws/config.yaml
+
+# Then just run commands — no env vars needed:
+sws compute list
+```
+
+Use `SWS_PROFILE` to keep multiple profiles (e.g. one per region); each is a
+separate entry in `~/.sws/config.yaml`:
+
+```bash
+SWS_PROFILE=abuja sws configure     # saves the "abuja" profile
+SWS_PROFILE=abuja sws compute list  # uses it
+```
+
 ## First login
 
 ```bash
@@ -88,13 +114,18 @@ Non-interactive / CI:
 sws login you@example.com '$PASSWORD'
 ```
 
-Or skip login entirely by passing a pre-issued token:
+Or skip login entirely by passing a pre-issued token + region:
 
 ```bash
 export SWS_API_URL=https://savannaa.com
-export SWS_TOKEN=eyJhbGci...
+export SWS_TOKEN=ctk_...
+export SWS_REGION=ng-abuja-1   # ng-abuja-1 | ng-lagos-1 (default ng-lagos-1)
 sws compute list
 ```
+
+> Precedence: environment variables override `~/.sws/config.yaml`. `SWS_REGION`
+> is sent as the `x-region` header — without it, commands target `ng-lagos-1`,
+> so a list can come back empty if your resources are in the other region.
 
 ---
 
