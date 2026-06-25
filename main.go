@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"crypto/tls"
 	"encoding/json"
@@ -16,7 +17,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const version = "1.0.1"
+const version = "1.0.2"
 
 var (
 	bold    = color.New(color.Bold).SprintFunc()
@@ -71,16 +72,24 @@ func loadConfig() *Config {
 		if cloud, ok := root["clouds"]; ok {
 			if prof, ok := cloud[profile]; ok {
 				if m, ok := prof.(map[string]interface{}); ok {
+					// File values fill in only what the environment didn't set —
+					// env vars take precedence (aws-cli behaviour).
 					if auth, ok := m["auth"].(map[string]interface{}); ok {
-						if v, ok := auth["auth_url"].(string); ok {
+						if v, ok := auth["auth_url"].(string); ok && cfg.AuthURL == "" {
 							cfg.AuthURL = v
 						}
-						if v, ok := auth["username"].(string); ok {
+						if v, ok := auth["token"].(string); ok && cfg.Token == "" {
+							cfg.Token = v
+						}
+						if v, ok := auth["username"].(string); ok && cfg.Email == "" {
 							cfg.Email = v
 						}
-						if v, ok := auth["password"].(string); ok {
+						if v, ok := auth["password"].(string); ok && cfg.Password == "" {
 							cfg.Password = v
 						}
+					}
+					if v, ok := m["region_name"].(string); ok && cfg.Region == "" {
+						cfg.Region = v
 					}
 				}
 			}
@@ -222,6 +231,8 @@ func main() {
 		printUsage()
 	case "login":
 		cmdLogin(cfg, args)
+	case "configure":
+		cmdConfigure(cfg, args)
 	case "compute":
 		cmdCompute(cfg, args)
 	case "network":
@@ -259,6 +270,7 @@ func printUsage() {
 
 %s
   login                     Authenticate with the platform
+  configure                 Set up credentials + region (~/.sws/config.yaml)
   compute                   Manage virtual machines
   network                   Manage networks
   volume                    Manage block storage volumes
@@ -318,6 +330,92 @@ func cmdLogin(cfg *Config, args []string) {
 	tokenFile := filepath.Join(dir, "token")
 	os.WriteFile(tokenFile, []byte(cfg.Token), 0600)
 	fmt.Printf("  Token saved to %s\n", dim(tokenFile))
+}
+
+// cmdConfigure is an aws-configure-style interactive setup. It prompts for the
+// API URL, an API token (ctk_…), and the default region, then writes them to
+// ~/.sws/config.yaml under the active profile (SWS_PROFILE, default "default"),
+// preserving any other profiles already in the file. Press Enter at a prompt
+// to keep the current value shown in [brackets].
+func cmdConfigure(cfg *Config, args []string) {
+	reader := bufio.NewReader(os.Stdin)
+	ask := func(label, current string) string {
+		shown := current
+		if shown == "" {
+			shown = "None"
+		}
+		fmt.Printf("%s [%s]: ", label, shown)
+		line, _ := reader.ReadString('\n')
+		line = strings.TrimSpace(line)
+		if line == "" {
+			return current
+		}
+		return line
+	}
+
+	profile := os.Getenv("SWS_PROFILE")
+	if profile == "" {
+		profile = "default"
+	}
+
+	apiURL := cfg.AuthURL
+	if apiURL == "" {
+		apiURL = "https://savannaa.com"
+	}
+	region := cfg.Region
+	if region == "" {
+		region = "ng-lagos-1"
+	}
+
+	apiURL = ask("API URL", apiURL)
+
+	// Show only the tail of an existing token; blank input keeps it.
+	tokenShown := cfg.Token
+	if len(tokenShown) > 8 {
+		tokenShown = "****" + tokenShown[len(tokenShown)-4:]
+	}
+	tokenInput := ask("API token (ctk_...)", tokenShown)
+	token := cfg.Token
+	if tokenInput != tokenShown {
+		token = tokenInput
+	}
+
+	region = ask("Default region (ng-abuja-1 | ng-lagos-1)", region)
+
+	// Preserve other profiles already in the file.
+	home, _ := os.UserHomeDir()
+	dir := filepath.Join(home, ".sws")
+	path := filepath.Join(dir, "config.yaml")
+	root := map[string]map[string]interface{}{}
+	if data, err := os.ReadFile(path); err == nil {
+		yaml.Unmarshal(data, &root)
+	}
+	if root == nil {
+		root = map[string]map[string]interface{}{}
+	}
+	clouds := root["clouds"]
+	if clouds == nil {
+		clouds = map[string]interface{}{}
+	}
+	clouds[profile] = map[string]interface{}{
+		"auth": map[string]interface{}{
+			"auth_url": apiURL,
+			"token":    token,
+		},
+		"region_name": region,
+	}
+	root["clouds"] = clouds
+
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		fmt.Fprintf(os.Stderr, "%s %v\n", red("Error:"), err)
+		os.Exit(1)
+	}
+	out, _ := yaml.Marshal(root)
+	if err := os.WriteFile(path, out, 0600); err != nil {
+		fmt.Fprintf(os.Stderr, "%s %v\n", red("Error:"), err)
+		os.Exit(1)
+	}
+	fmt.Printf("%s Saved profile %s to %s\n", green("✓"), cyan(profile), dim(path))
 }
 
 // ── Compute ──────────────────────────────────────────
