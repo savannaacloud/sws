@@ -16,7 +16,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const version = "1.0.0"
+const version = "1.0.1"
 
 var (
 	bold    = color.New(color.Bold).SprintFunc()
@@ -33,6 +33,7 @@ type Config struct {
 	Password string `yaml:"password"`
 	Token    string `yaml:"token"`
 	Profile  string `yaml:"profile"`
+	Region   string `yaml:"region"`
 }
 
 func loadConfig() *Config {
@@ -44,6 +45,9 @@ func loadConfig() *Config {
 	}
 	if token := os.Getenv("SWS_TOKEN"); token != "" {
 		cfg.Token = token
+	}
+	if region := os.Getenv("SWS_REGION"); region != "" {
+		cfg.Region = region
 	}
 
 	// Load config file
@@ -140,6 +144,12 @@ func (c *Config) request(method, path string, body interface{}) (map[string]inte
 	}
 	req.Header.Set("Authorization", "Bearer "+c.Token)
 	req.Header.Set("Content-Type", "application/json")
+	// Route the request to the caller's region (e.g. ng-abuja-1 | ng-lagos-1).
+	// Without this the API falls back to the default region and a user whose
+	// resources live in the other region sees an empty list.
+	if c.Region != "" {
+		req.Header.Set("x-region", c.Region)
+	}
 
 	client := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
 	resp, err := client.Do(req)
@@ -274,6 +284,7 @@ func printUsage() {
   SWS_API_URL    Base URL (e.g., https://savannaa.com)
   SWS_TOKEN      Auth token (skip login)
   SWS_PROFILE    Config profile name (default: "default")
+  SWS_REGION     Region to target: ng-abuja-1 | ng-lagos-1 (default: ng-lagos-1)
 `, bold("sws"), version,
 		bold("USAGE:"), bold("COMMANDS:"), bold("EXAMPLES:"), bold("ENVIRONMENT:"))
 }
