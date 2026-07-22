@@ -14,10 +14,28 @@ import (
 	"text/tabwriter"
 
 	"github.com/fatih/color"
+	"golang.org/x/term"
 	"gopkg.in/yaml.v3"
 )
 
-const version = "1.0.2"
+const version = "1.1.1"
+
+// readSecret reads a line from stdin WITHOUT echoing it (so passwords aren't
+// shown on screen or left in terminal scrollback). Falls back to a normal read
+// when stdin is not an interactive terminal (e.g. piped input).
+func readSecret(prompt string) string {
+	fmt.Print(prompt)
+	if term.IsTerminal(int(os.Stdin.Fd())) {
+		b, err := term.ReadPassword(int(os.Stdin.Fd()))
+		fmt.Println()
+		if err == nil {
+			return strings.TrimSpace(string(b))
+		}
+	}
+	var s string
+	fmt.Scanln(&s)
+	return strings.TrimSpace(s)
+}
 
 var (
 	bold    = color.New(color.Bold).SprintFunc()
@@ -308,8 +326,7 @@ func cmdLogin(cfg *Config, args []string) {
 	} else {
 		fmt.Print("Email: ")
 		fmt.Scanln(&cfg.Email)
-		fmt.Print("Password: ")
-		fmt.Scanln(&cfg.Password)
+		cfg.Password = readSecret("Password: ")
 	}
 	if cfg.AuthURL == "" {
 		fmt.Print("API URL: ")
