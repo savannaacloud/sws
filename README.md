@@ -106,12 +106,17 @@ sws login
 # API URL: https://savannaa.com
 ```
 
-Token is cached at `~/.config/sws/credentials.yaml` and `~/.config/sws/token`. Subsequent commands reuse it until it expires.
+The password prompt uses **hidden input** — what you type is never echoed to the
+screen or left in terminal scrollback (v1.1.1+). `sws login <email>` prompts for
+just the password. Token is cached at `~/.config/sws/credentials.yaml` and
+`~/.config/sws/token`; subsequent commands reuse it until it expires.
 
-Non-interactive / CI:
+Non-interactive / CI — prefer a pre-issued token (below). If you must pass a
+password on the command line, note it is **visible in your shell history and the
+process list**:
 
 ```bash
-sws login you@example.com '$PASSWORD'
+sws login you@example.com '$PASSWORD'   # discouraged: leaks into shell history
 ```
 
 Or skip login entirely by passing a pre-issued token + region:
@@ -229,6 +234,16 @@ sws compute list --format json | jq '.[] | .name'
 | `error 401: ...` | token expired or wrong password | `sws login` again |
 | `error 403: No project assigned` | user has no project bound | ask your admin |
 | `error 404` on a subcommand | backend route not registered | check the console works; open an issue |
+
+---
+
+## Changelog
+
+- **v1.1.1** — `sws login` now reads the password with **hidden input** (no
+  terminal echo, nothing left in scrollback). `sws login <email>` prompts for the
+  password instead of requiring it on the command line; the two-argument form
+  warns that a password passed as an argument leaks into shell history. Piped /
+  non-interactive stdin still works for automation.
 
 ---
 
