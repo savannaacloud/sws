@@ -18,7 +18,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const version = "1.1.1"
+const version = "1.2.0"
 
 // readSecret reads a line from stdin WITHOUT echoing it (so passwords aren't
 // shown on screen or left in terminal scrollback). Falls back to a normal read

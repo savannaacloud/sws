@@ -204,6 +204,21 @@ sws secret list
 sws image list
 ```
 
+### Security posture (CSPM)
+
+```bash
+sws cspm checks                        # posture findings: control, status, severity, resource, reason
+sws cspm insights                      # top failing controls, by severity, resources failing many controls
+sws cspm asff > findings.json          # export as AWS Security Hub ASFF (SIEM / GRC import)
+sws cspm remediate SAV-SG.1 <arn>      # perform the real fix (remove the world-open rule / strip public ACL)
+sws cspm suppress SAV-SG.1 <arn> "accepted risk; ticket SEC-1234"
+sws cspm disable SAV-EBS.1 "no encrypted-volume requirement in this environment"
+sws cspm restore SAV-SG.1 <arn>        # (also: enable <control_id>)
+```
+
+Control ids are Savannaa-namespaced (`SAV-*`); each finding also carries the canonical
+standard control it maps to (CIS AWS Foundations / AWS FSBP / NIST 800-53) and its standard ARN.
+
 ---
 
 ## Configuration
