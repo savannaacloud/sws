@@ -273,10 +273,127 @@ func main() {
 		cmdFirewall(cfg, args)
 	case "image":
 		cmdImage(cfg, args)
+	case "cspm":
+		cmdCspm(cfg, args)
 	default:
 		fmt.Fprintf(os.Stderr, "%s Unknown command: %s\n", red("Error:"), cmd)
 		printUsage()
 		os.Exit(1)
+	}
+}
+
+// ── CSPM (Security Hub) ──────────────────────────────
+
+func cmdCspm(cfg *Config, args []string) {
+	if len(args) == 0 {
+		fmt.Println("Usage: sws cspm <checks|insights|asff|suppress|restore|remediate|disable|enable>")
+		return
+	}
+	switch args[0] {
+	case "checks", "list", "ls":
+		obj, _, err := cfg.request("GET", "/api/security/cspm/checks", nil)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		rows := [][]string{}
+		if checks, ok := obj["checks"].([]interface{}); ok {
+			for _, it := range checks {
+				m := it.(map[string]interface{})
+				rows = append(rows, []string{str(m["control_id"]), str(m["status"]), strings.ToUpper(str(m["severity"])), str(m["resource"]), str(m["reason"])})
+			}
+		}
+		printTable([]string{"Control", "Status", "Sev", "Resource", "Reason"}, rows)
+	case "insights":
+		obj, _, err := cfg.request("GET", "/api/security/cspm/insights", nil)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		if ins, ok := obj["insights"].([]interface{}); ok {
+			for _, i := range ins {
+				im := i.(map[string]interface{})
+				items, _ := im["items"].([]interface{})
+				if len(items) == 0 {
+					continue
+				}
+				fmt.Println(bold(str(im["title"])))
+				for _, it := range items {
+					m := it.(map[string]interface{})
+					label := str(m["key"])
+					if m["label"] != nil {
+						label = str(m["label"])
+					}
+					fmt.Printf("  %-52s %v\n", label, m["count"])
+				}
+				fmt.Println()
+			}
+		}
+	case "asff":
+		obj, _, err := cfg.request("GET", "/api/security/cspm/asff", nil)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		b, _ := json.MarshalIndent(obj, "", "  ")
+		fmt.Println(string(b))
+	case "suppress":
+		if len(args) < 4 {
+			fmt.Println("Usage: sws cspm suppress <control_id> <resource_arn> <reason...>")
+			return
+		}
+		obj, _, err := cfg.request("POST", "/api/security/cspm/suppress", map[string]interface{}{"control_id": args[1], "resource_arn": args[2], "reason": strings.Join(args[3:], " ")})
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		fmt.Printf("%s %s\n", str(obj["status"]), str(obj["control_id"]))
+	case "restore":
+		if len(args) < 3 {
+			fmt.Println("Usage: sws cspm restore <control_id> <resource_arn>")
+			return
+		}
+		obj, _, err := cfg.request("POST", "/api/security/cspm/restore", map[string]interface{}{"control_id": args[1], "resource_arn": args[2]})
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		fmt.Println(str(obj["status"]))
+	case "remediate":
+		if len(args) < 3 {
+			fmt.Println("Usage: sws cspm remediate <control_id> <resource_arn>")
+			return
+		}
+		obj, _, err := cfg.request("POST", "/api/security/cspm/remediate", map[string]interface{}{"control_id": args[1], "resource_arn": args[2]})
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		fmt.Printf("%s: %s\n", str(obj["status"]), str(obj["changes"]))
+	case "disable":
+		if len(args) < 3 {
+			fmt.Println("Usage: sws cspm disable <control_id> <reason...>")
+			return
+		}
+		obj, _, err := cfg.request("POST", "/api/security/cspm/disable-control", map[string]interface{}{"control_id": args[1], "reason": strings.Join(args[2:], " ")})
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		fmt.Printf("%s %s\n", str(obj["status"]), str(obj["control_id"]))
+	case "enable":
+		if len(args) < 2 {
+			fmt.Println("Usage: sws cspm enable <control_id>")
+			return
+		}
+		obj, _, err := cfg.request("POST", "/api/security/cspm/enable-control", map[string]interface{}{"control_id": args[1]})
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		fmt.Println(str(obj["status"]))
+	default:
+		fmt.Printf("Unknown: cspm %s\n", args[0])
 	}
 }
 
@@ -300,6 +417,7 @@ func printUsage() {
   cluster                   Manage Kubernetes clusters
   secret                    Manage secrets and keys
   lb                        Manage load balancers
+  cspm                      Cloud security posture (Security Hub CSPM)
   version                   Show CLI version
   help                      Show this help
 
@@ -309,6 +427,8 @@ func printUsage() {
   sws volume create --name data --size 50
   sws container run --name api --image python:3.12
   sws cluster create prod-k8s --template kubernetes-default --workers 3
+  sws cspm checks
+  sws cspm remediate SAV-SG.1 arn:savanna:ec2:ng-lagos-1::security-group/<id>
 
 %s
   SWS_API_URL    Base URL (e.g., https://savannaa.com)
